@@ -832,59 +832,93 @@
 
     // Parser for Google AI Studio exports
     function parseAIStudioMarkdown(raw) {
-      const interactions = [];
-      let pos = 0;
-      const USER_TAG = '--- User ---';
-      const AI_TAG = '--- AI Response ---';
-      const SEP = '------------------------------';
+  const interactions = [];
+  let pos = 0;
+  const USER_TAG = '--- User ---';
+  const AI_TAG = '--- AI Response ---';
+  const SEP = '------------------------------';
 
-      while (true) {
-        const idxUser = raw.indexOf(USER_TAG, pos);
-        if (idxUser === -1) break;
-        const userStart = idxUser + USER_TAG.length;
-        const delim1 = raw.indexOf(SEP, userStart);
-        if (delim1 === -1) break;
-        const userText = raw.slice(userStart, delim1).trim();
+  while (true) {
+    const idxUser = raw.indexOf(USER_TAG, pos);
+    if (idxUser === -1) break;
 
-        const afterDelim1 = delim1 + SEP.length;
-        const idxAi = raw.indexOf(AI_TAG, afterDelim1);
-        if (idxAi === -1) break;
+    const userStart = idxUser + USER_TAG.length;
+    const delim1 = raw.indexOf(SEP, userStart);
+    if (delim1 === -1) {
+      // user sans séparateur → on prend tout le reste
+      const userText = raw.slice(userStart).trim();
+      interactions.push({ user: userText, ai: '', selectedForExport: false });
+      break;
+    }
 
-        let thinkingText = '';
-        const idxThinkOpen = raw.indexOf('<thinking>', afterDelim1);
-        if (idxThinkOpen !== -1 && idxThinkOpen < idxAi) {
-          const idxThinkClose = raw.indexOf('</thinking>', idxThinkOpen);
-          if (idxThinkClose !== -1 && idxThinkClose < idxAi) {
-            thinkingText = raw.slice(
-              idxThinkOpen + '<thinking>'.length,
-              idxThinkClose
-            ).trim();
-          }
+    const userText = raw.slice(userStart, delim1).trim();
+    const afterDelim1 = delim1 + SEP.length;
+
+    const nextUser = raw.indexOf(USER_TAG, afterDelim1);
+    const nextAi = raw.indexOf(AI_TAG, afterDelim1);
+
+    // Petite fonction utilitaire pour extraire un éventuel <thinking>
+    function extractThinking(endIndexForSearch) {
+      let thinkingText = '';
+      const idxThinkOpen = raw.indexOf('<thinking>', afterDelim1);
+      if (idxThinkOpen !== -1 && idxThinkOpen < endIndexForSearch) {
+        const idxThinkClose = raw.indexOf('</thinking>', idxThinkOpen);
+        if (idxThinkClose !== -1 && idxThinkClose < endIndexForSearch) {
+          thinkingText = raw
+            .slice(idxThinkOpen + '<thinking>'.length, idxThinkClose)
+            .trim();
         }
+      }
+      return thinkingText;
+    }
 
-        const aiStart = idxAi + AI_TAG.length;
-        const idxNextUser = raw.indexOf(USER_TAG, aiStart);
-        const aiEnd = idxNextUser !== -1 ? idxNextUser : raw.length;
-        let aiText = raw.slice(aiStart, aiEnd).trim();
+    // 🔹 Cas 1 : pas de `--- AI Response ---` avant le prochain `--- User ---`
+    if (nextAi === -1 || (nextUser !== -1 && nextUser < nextAi)) {
+      const blockEnd = nextUser !== -1 ? nextUser : raw.length;
+      const thinkingText = extractThinking(blockEnd);
 
-        if (thinkingText) {
-          aiText = '<thinking>\n' + thinkingText + '\n</thinking>\n\n' + aiText;
-        }
-
-        interactions.push({
-          user: userText,
-          ai: aiText,
-          selectedForExport: false
-        });
-        pos = aiEnd;
+      let aiText = '';
+      if (thinkingText) {
+        aiText = '<thinking>\n' + thinkingText + '\n</thinking>';
       }
 
-      let title = 'AI Studio export';
-      const m = raw.match(/^([^\n]+)\n=+/);
-      if (m) title = m[1].trim();
+      interactions.push({
+        user: userText,
+        ai: aiText,               // ici : thinking seul éventuel
+        selectedForExport: false
+      });
 
-      return { title, meta: { title }, interactions };
+      pos = blockEnd;
+      continue;
     }
+
+    // 🔹 Cas 2 : bloc complet User + (thinking) + AI Response
+    const aiStart = nextAi + AI_TAG.length;
+    const blockEnd = nextUser !== -1 ? nextUser : raw.length;
+
+    const thinkingText = extractThinking(nextAi);
+    let aiText = raw.slice(aiStart, blockEnd).trim();
+
+    if (thinkingText) {
+      aiText = '<thinking>\n' + thinkingText + '\n</thinking>\n\n' + aiText;
+    }
+
+    interactions.push({
+      user: userText,
+      ai: aiText,
+      selectedForExport: false
+    });
+
+    pos = blockEnd;
+  }
+
+  let title = 'AI Studio export';
+  const m = raw.match(/^([^\n]+)\n=+/);
+  if (m) title = m[1].trim();
+
+  return { title, meta: { title }, interactions };
+}
+
 
     function getPathLabel(f) {
       const raw = f.path || f.name;
