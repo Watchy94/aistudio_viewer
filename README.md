@@ -78,7 +78,8 @@ Original script: © piknockyou, MIT License.
 
 ## 5. Contributing / feedback
 
-This is my first public coded project, mostly vibe-coded (ironically) with ChatGPT 5.1. 
+This is my first public coded project, mostly vibe-coded (ironically) with ChatGPT 5.1.
+
 Bug reports, suggestions or pull requests are very welcome!
 
 - Open an issue: https://github.com/Watchy94/aistudio_viewer/issues
