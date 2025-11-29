@@ -590,34 +590,81 @@
       font-size: 12px;
     }
 
-    .msg-ai .markdown-body :is(h1,h2,h3,h4) {
-      margin-top: 0.7em;
-      margin-bottom: 0.3em;
-      font-weight: 600;
-    }
-    .msg-ai .markdown-body p {
-      margin: 0.35em 0;
-    }
-    .msg-ai .markdown-body ul,
-    .msg-ai .markdown-body ol {
-      margin: 0.35em 0 0.35em 1.25em;
-    }
-    .msg-ai .markdown-body code {
-      padding: 1px 3px;
-      border-radius: 3px;
-      background: rgba(148,163,184,0.25);
-      font-size: 0.9em;
-    }
-    .msg-ai .markdown-body pre code {
-      display: block;
-      padding: 7px 8px;
-      border-radius: 6px;
-      background: #020617;
-      color: #e5e7eb;
-      border: 1px solid #020617;
-      overflow-x: auto;
-      font-size: 0.85em;
-    }
+    /* Rendu Markdown commun */
+.markdown-body {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Paragraphes */
+.markdown-body p {
+  margin: 0.6em 0;
+}
+
+/* Listes */
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.6em 0 0.6em 1.4em;
+}
+
+.markdown-body li + li {
+  margin-top: 0.2em;
+}
+
+/* Titres Markdown (#, ##, ###...) */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  font-weight: 700;
+}
+
+.markdown-body h1 { font-size: 1.12rem; }
+.markdown-body h2 { font-size: 1.06rem; }
+.markdown-body h3 { font-size: 1.02rem; }
+.markdown-body h4 { font-size: 0.96rem; }
+
+/* "Gros titres" de type 1. ... / 2. ... au début de la réponse */
+.msg-ai .markdown-body > ol:first-of-type > li {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+
+.msg-ai .markdown-body > ol:first-of-type {
+  margin-bottom: 0.6em;
+}
+
+/* Gras / italique */
+.markdown-body strong {
+  font-weight: 700;
+}
+
+.markdown-body em {
+  font-style: italic;
+}
+
+/* Code inline + blocs */
+.markdown-body code {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(148,163,184,0.25);
+  font-size: 0.9em;
+}
+
+.markdown-body pre code {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: #020617;
+  color: #e5e7eb;
+  border: 1px solid #020617;
+  overflow-x: auto;
+  font-size: 0.85em;
+}
+
 
     /* edit mode */
     textarea.msg-edit {
