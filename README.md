@@ -26,8 +26,10 @@ A small single-file web app to browse **Google AI Studio** markdown exports, wit
 
 4. Each button downloads a markdown file you can open with this viewer.
 
-The script is a small modification of this original one:  
-https://greasyfork.org/en/scripts/554502-google-ai-studio-conversation-chat-markdown-export-download-dom-based
+The original export userscript is based on:
+[https://greasyfork.org/...](https://greasyfork.org/en/scripts/554502-google-ai-studio-conversation-chat-markdown-export-download-dom-based)
+
+Original script: © piknockyou, MIT License.
 
 ---
 
