@@ -76,7 +76,7 @@ https://greasyfork.org/en/scripts/554502-google-ai-studio-conversation-chat-mark
 
 ## 5. Contributing / feedback
 
-This is my first public coded project, mostly vibe coded irocinally using CHatGPT 5.1.  
+This is my first public coded project, mostly vibe-coded (ironically) with ChatGPT 5.1. 
 Bug reports, suggestions or pull requests are very welcome!
 
 - Open an issue: https://github.com/Watchy94/aistudio_viewer/issues
