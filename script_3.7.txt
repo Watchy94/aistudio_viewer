@@ -1,0 +1,279 @@
+// ==UserScript==
+// @name         Google AI Studio | Conversation/Chat MarkDown-Export/Download (SVG Icons Fix)
+// @namespace    http://violentmonkey.net/
+// @version      3.7
+// @description  Export AI Studio conversations to Markdown. Uses SVG icons to prevent font issues.
+// @author       Vibe-Coded by Piknockyou (Modified by STR)
+// @license      MIT
+// @match        https://aistudio.google.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=aistudio.google.com
+// @grant        GM_addStyle
+// @run-at       document-idle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // CONFIGURATION
+    let PREFER_RAW_MODE = true;
+    let INCLUDE_AI_THINKING = false;
+
+    const EXPORT_FILENAME_PREFIX = 'aistudio_chat_export_';
+    const SCROLL_DELAY_MS = 50;
+    const RAW_MODE_MENU_DELAY_MS = 200;
+    const RAW_MODE_RENDER_DELAY_MS = 300;
+    const THOUGHT_EXPAND_DELAY_MS = 500;
+
+    let isScrolling = false;
+    let collectedData = new Map();
+    let exportButtonState = 'IDLE';
+    let abortController;
+    let exportButton, thinkingButton;
+
+    // --- UTILS ---
+    function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+    function getCurrentTimestamp() {
+        const n = new Date();
+        return `${n.getFullYear()}${(n.getMonth()+1).toString().padStart(2,'0')}${n.getDate().toString().padStart(2,'0')}_${n.getHours().toString().padStart(2,'0')}${n.getMinutes().toString().padStart(2,'0')}`;
+    }
+
+    // --- LOGIC ---
+    async function toggleRawMode() {
+        const moreButton = document.querySelector('button[aria-label="View more actions"]');
+        if (!moreButton) return false;
+        moreButton.click();
+        await delay(RAW_MODE_MENU_DELAY_MS);
+        const rawModeButton = Array.from(document.querySelectorAll('button[role="menuitem"]')).find(btn => btn.textContent.includes('Raw Mode'));
+        if (!rawModeButton) { moreButton.click(); return false; }
+        rawModeButton.click();
+        await delay(RAW_MODE_RENDER_DELAY_MS);
+        return true;
+    }
+
+    async function expandThinkingSections(modelDiv) {
+        let expanded = false;
+        const expandButtons = modelDiv.querySelectorAll('button');
+        for (const button of expandButtons) {
+            const txt = button.textContent?.toLowerCase() || '';
+            const aria = button.getAttribute('aria-expanded');
+            if ((txt.includes('thought') || txt.includes('thinking') || txt.includes('show more')) && aria === 'false') {
+                button.click();
+                expanded = true;
+            }
+        }
+        if (expanded) await delay(THOUGHT_EXPAND_DELAY_MS);
+    }
+
+    async function extractData() {
+        let newlyFound = 0;
+        const turns = document.querySelectorAll('ms-chat-turn');
+
+        for (const [index, turn] of turns.entries()) {
+            const turnKey = turn;
+            if (!collectedData.has(turnKey)) newlyFound++;
+
+            const info = collectedData.get(turnKey) || { type: 'unknown', user: null, thought: null, response: null };
+
+            // USER TURN
+            if (turn.querySelector('.chat-turn-container.user')) {
+                info.type = 'user';
+                const raw = turn.querySelector('ms-text-chunk .very-large-text-container');
+                if (raw) info.user = raw.textContent.trim();
+                else {
+                    const node = turn.querySelector('.turn-content ms-cmark-node');
+                    if (node) info.user = node.innerText.trim();
+                }
+            }
+            // MODEL TURN
+            else if (turn.querySelector('.chat-turn-container.model')) {
+                info.type = 'model';
+
+                if (INCLUDE_AI_THINKING) await expandThinkingSections(turn);
+
+                // 1. EXTRACT THOUGHT
+                if (!info.thought && INCLUDE_AI_THINKING) {
+                    const rawThought = turn.querySelector('ms-thought-chunk .very-large-text-container');
+                    if (rawThought) info.thought = rawThought.textContent.trim();
+                    else {
+                        const node = turn.querySelector('ms-thought-chunk .mat-expansion-panel-body');
+                        if (node) info.thought = node.textContent.trim();
+                    }
+                }
+
+                // 2. EXTRACT RESPONSE
+                if (!info.response) {
+                    const contentChunks = Array.from(turn.querySelectorAll('.turn-content > ms-prompt-chunk'));
+
+                    const cleanTexts = contentChunks
+                        .filter(chunk => !chunk.querySelector('ms-thought-chunk'))
+                        .map(chunk => {
+                            const raw = chunk.querySelector('ms-text-chunk .very-large-text-container');
+                            if (raw) return raw.textContent.trim();
+                            return chunk.innerText.trim();
+                        })
+                        .filter(t => t && !t.startsWith('Model') && !t.startsWith('Thoughts'));
+
+                    if (cleanTexts.length > 0) info.response = cleanTexts.join('\n\n');
+                }
+            }
+            collectedData.set(turnKey, info);
+        }
+        return newlyFound > 0;
+    }
+
+    async function runExport(withThinking) {
+        INCLUDE_AI_THINKING = withThinking;
+        abortController = new AbortController();
+        setBtnState('WORKING');
+
+        try {
+            let scroller = document.querySelector('ms-autoscroll-container');
+            if (!scroller) {
+                 const turns = document.querySelector('ms-chat-turn')?.parentElement;
+                 if(turns) {
+                     let p = turns;
+                     while(p && p.scrollHeight <= p.clientHeight) p = p.parentElement;
+                     scroller = p || document.documentElement;
+                 } else scroller = document.documentElement;
+            }
+
+            scroller.scrollTo(0,0); await delay(500);
+            await toggleRawMode();
+
+            let retries = 0;
+            let lastTop = -1;
+            collectedData.clear();
+
+            while(retries < 200) {
+                if (abortController.signal.aborted) break;
+
+                await extractData();
+
+                const prev = scroller.scrollTop;
+                if (prev + scroller.clientHeight >= scroller.scrollHeight - 10) break;
+
+                scroller.scrollTop += 500;
+                await delay(SCROLL_DELAY_MS);
+
+                if (scroller.scrollTop === lastTop) retries++;
+                else retries = 0;
+                lastTop = scroller.scrollTop;
+            }
+
+            await extractData();
+            download();
+            setBtnState('SUCCESS');
+
+        } catch(e) {
+            console.error(e);
+            setBtnState('ERROR');
+        }
+    }
+
+    function download() {
+        const sorted = Array.from(collectedData.values());
+        if (!sorted.length) return alert('No data found');
+
+        let text = 'Google AI Studio Chat Records\n=========================================\n\n';
+
+        sorted.forEach(item => {
+            if (item.type === 'user' && item.user) {
+                text += `--- User ---\n${item.user}\n\n`;
+            }
+            if (item.type === 'model') {
+                if (item.thought) {
+                    text += `<thinking>\n${item.thought}\n</thinking>\n\n`;
+                }
+                if (item.response) {
+                    let cleanResp = item.response.replace(/^--- AI Response ---\n/, '');
+                    text += `--- AI Response ---\n${cleanResp}\n\n`;
+                }
+            }
+            text += '------------------------------\n\n';
+        });
+
+        const blob = new Blob([text], {type: 'text/markdown'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${EXPORT_FILENAME_PREFIX}${getCurrentTimestamp()}.md`;
+        a.click();
+    }
+
+    function setBtnState(state) {
+        exportButtonState = state;
+        if (!exportButton || !thinkingButton) return;
+
+        if(state === 'WORKING') {
+            exportButton.disabled = true;
+            thinkingButton.disabled = true;
+            document.body.style.cursor = 'wait';
+        } else {
+            exportButton.disabled = false;
+            thinkingButton.disabled = false;
+            document.body.style.cursor = 'default';
+        }
+    }
+
+    // --- DOM UI CREATION (SVG MODE) ---
+    function createUI() {
+        const container = document.querySelector('ms-toolbar .toolbar-right');
+        if (!container || document.getElementById('ai-export-group')) return;
+
+        const group = document.createElement('div');
+        group.id = 'ai-export-group';
+        group.style.display = 'flex';
+        group.style.gap = '4px'; // Closer buttons
+        group.style.margin = '0 8px';
+        group.style.alignItems = 'center';
+
+        // Helper to create buttons with SVG
+        const makeBtn = (svgPath, title, color, onClick) => {
+            const b = document.createElement('button');
+            b.title = title;
+            b.className = 'mat-mdc-tooltip-trigger ms-button-borderless ms-button-icon';
+            b.style.color = color;
+            b.style.opacity = '0.8';
+            b.style.transition = 'opacity 0.2s';
+            b.style.padding = '8px'; // Ensure click area
+
+            b.onmouseover = () => b.style.opacity = '1';
+            b.onmouseout = () => b.style.opacity = '0.8';
+            b.onclick = onClick;
+
+            // Create SVG directly
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("height", "24");
+            svg.setAttribute("width", "24");
+            svg.setAttribute("fill", "currentColor");
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", svgPath);
+
+            svg.appendChild(path);
+            b.appendChild(svg);
+            return b;
+        };
+
+        // DOWNLOAD ICON (Standard)
+        const downloadPath = "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z";
+
+        // BRAIN ICON (Thinking)
+        // Using a simpler, robust shape for the brain
+        const brainPath = "M12,2A7,7,0,0,0,5,9c0,4.16,4.68,6.86,5.32,10.64C10.42,20.35,11.16,21,12,21h0c.84,0,1.58-.65,1.68-1.36C14.32,15.86,19,13.16,19,9A7,7,0,0,0,12,2ZM7.05,9A4.94,4.94,0,0,1,12,4a4.94,4.94,0,0,1,4.95,5c0,2.53-2.19,4.39-3.32,6.56A3.63,3.63,0,0,0,12,17.9a3.63,3.63,0,0,0-1.63-2.34C9.24,13.39,7.05,11.53,7.05,9Z M12 6c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm-2 2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z";
+
+        exportButton = makeBtn(downloadPath, 'Export Standard', '#e3e3e3', () => runExport(false));
+        thinkingButton = makeBtn(brainPath, 'Export with Thinking', '#A8C7FA', () => runExport(true));
+
+        group.appendChild(exportButton);
+        group.appendChild(thinkingButton);
+
+        const more = container.querySelector('button[iconname="more_vert"]');
+        if (more) container.insertBefore(group, more);
+        else container.appendChild(group);
+    }
+
+    const obs = new MutationObserver(() => createUI());
+    obs.observe(document.body, {childList:true, subtree:true});
+    createUI();
+})();
