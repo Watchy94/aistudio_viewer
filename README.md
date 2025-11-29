@@ -9,6 +9,7 @@ That script is a modified version from https://greasyfork.org/en/scripts/554502-
 
 You will have two new button in google ai studio to export (one without "thinking" and one with)
 
+
 2. Using the markdown viewer
 You download the file "aistudio_viewer_v1.html", it's a simple app in html, so you just open it.
 
