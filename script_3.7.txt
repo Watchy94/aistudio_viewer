@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Google AI Studio | Conversation/Chat MarkDown-Export/Download (HTML→Markdown improved)
 // @namespace    http://violentmonkey.net/
-// @version      3.8
+// @version      3.7
 // @description  Export AI Studio conversations to Markdown with better preservation of formatting (titles, bold, lists).
-// @author       3.8, Modified by STR & ChatGPT. Initially Vibe-Coded by Piknockyou
+// @author       3.7, Modified by STR & ChatGPT. Initially Vibe-Coded by Piknockyou
 // @license      MIT
 // @match        https://aistudio.google.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=aistudio.google.com
@@ -419,3 +419,4 @@
     obs.observe(document.body, { childList: true, subtree: true });
     createUI();
 })();
+
